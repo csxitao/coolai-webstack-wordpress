@@ -1,0 +1,8 @@
+_builds/
+_backups/
+.agents/
+.codex/
+*.zip
+*.log
+.DS_Store
+Thumbs.db
