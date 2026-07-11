@@ -1214,6 +1214,23 @@
             height: 100%;
             object-fit: cover;
         }
+        .website-icon .icon-fallback-text,
+        .website-icon-compact .icon-fallback-text,
+        .folder-item-icon .icon-fallback-text,
+        .folder-icon-item .icon-fallback-text,
+        .folder-icon-item-compact .icon-fallback-text {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(135deg, #eef2ff 0%, #e0f2fe 100%);
+            color: #334155;
+            font-weight: 700;
+            line-height: 1;
+            user-select: none;
+        }
 
         .website-title {
             font-size: 16px;
@@ -1846,15 +1863,16 @@
             background: linear-gradient(135deg, #FFB300 0%, #FFA000 100%);
         }
 
+
         .folder-icon-stack {
             position: relative;
             display: flex;
-            gap: 6px;
+            gap: 8px;
             align-items: center;
-            justify-content: center;
-            margin-bottom: 12px;
+            justify-content: flex-start;
+            margin: 0 0 12px 32px;
+            max-width: calc(100% - 44px);
         }
-
         .folder-icon-stack-compact {
             position: relative;
             display: flex;
@@ -1885,7 +1903,6 @@
             height: 32px;
             object-fit: contain;
         }
-
         .folder-icon-item-compact {
             width: 24px;
             height: 24px;
@@ -1930,7 +1947,6 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
             z-index: 10;
         }
-
         .folder-count-compact {
             position: absolute;
             top: -4px;
@@ -8442,6 +8458,7 @@
             // 初始化应用：加载设置、绑定事件、更新界面
             async init() {
                 await this.loadSettings();     // 从本地存储加载用户设置（等待完成）
+                this.reconcileCategoriesFromWebsites();
                 
                 // 修复：在更新UI之前先恢复自定义分类和顺序
                 // 这样 updateUI -> updateCategoryUI 才能正确设置激活状态，防止跳回第一个分类
@@ -9640,11 +9657,15 @@
                         const addBtn = e.target.closest('.add-category-btn');
 
                         if (deleteBtn) {
+                            e.preventDefault();
                             e.stopPropagation();
+                            if (!categoryTab) return;
                             const category = categoryTab.dataset.category;
                             this.deleteCategory(category);
                         } else if (renameBtn) {
+                            e.preventDefault();
                             e.stopPropagation();
+                            if (!categoryTab) return;
                             const category = categoryTab.dataset.category;
                             this.renameCategory(category);
                         } else if (addBtn) {
@@ -10866,32 +10887,29 @@
                     
                     // 优先级1: faviconUrl (网站图标)
                     if (item.faviconUrl && item.iconType === 'favicon') {
-                        const staticUrl = this.getStaticFaviconUrl(domain);
+                        const preferredIcon = this.getPreferredFaviconUrl(domain);
                         const apiUrl = this.getFaviconUrl(domain);
                         const onload = this.getIconOnloadHandler(domain);
-                        const onerror = this.getIconOnerrorHandler(domain, apiUrl, defaultIconUrl, !!staticUrl);
+                        const onerror = this.getIconOnerrorHandler(domain, apiUrl, defaultIconUrl, preferredIcon.allowApiFallback);
                         
                         // 🚀 优先检查缓存
-                        if (this.iconCache.has(domain)) {
-                            const cachedUrl = this.iconCache.get(domain);
+                        if (this.iconCache.has(this.normalizeIconDomain(domain))) {
+                            const cachedUrl = this.iconCache.get(this.normalizeIconDomain(domain));
                             if (cachedUrl && cachedUrl !== defaultIconUrl) {
                                 iconHtml = `<img src="${cachedUrl}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" data-managed-icon="true" data-cached="true" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;" onload="${onload}" onerror="${onerror}">`;
                             } else {
                                 // 缓存了默认图标，直接使用
                                 iconHtml = `<img src="${defaultIconUrl}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" data-managed-icon="true" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;">`;
                             }
-                        } else if (this.hasRecentIconFailure(domain)) {
-                            iconHtml = `<img src="${defaultIconUrl}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" data-managed-icon="true" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;">`;
                         } else {
-                            // 未缓存：构建fallback链
-                            const finalUrl = staticUrl || apiUrl;
-                            iconHtml = `<img src="${finalUrl}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" data-managed-icon="true" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;" onload="${onload}" onerror="${onerror}">`;
+                            // 未知服务器是否已有静态缓存时，直接走API，让后端统一判断缓存/抓取。
+                            iconHtml = `<img src="${preferredIcon.url}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" data-managed-icon="true" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;" onload="${onload}" onerror="${onerror}">`;
                         }
                     } 
                     // 优先级2: 自定义http图标
                     else if (item.icon && item.icon.startsWith('http')) {
                         // 如果已缓存，直接使用
-                        if (this.iconCache.has(domain)) {
+                        if (this.iconCache.has(this.normalizeIconDomain(domain))) {
                             iconHtml = `<img src="${this.escapeHtml(item.icon)}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" data-managed-icon="true" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;" onload="${this.getIconOnloadHandler(domain)}" onerror="${this.getIconOnerrorHandler(domain, '', defaultIconUrl, false)}">`;
                         } else {
                             iconHtml = `<img src="${this.escapeHtml(item.icon)}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" data-managed-icon="true" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;" onload="${this.getIconOnloadHandler(domain)}" onerror="${this.getIconOnerrorHandler(domain, '', defaultIconUrl, false)}">`;
@@ -11242,6 +11260,22 @@
                 
                 this.updateUndoButton();
                 console.log('📝 记录操作:', operation.type, this.state.operationHistory.length);
+            }
+
+            deepClone(value) {
+                if (value === undefined || value === null) {
+                    return value;
+                }
+
+                if (typeof structuredClone === 'function') {
+                    try {
+                        return structuredClone(value);
+                    } catch (error) {
+                        console.warn('structuredClone失败，使用JSON克隆:', error);
+                    }
+                }
+
+                return JSON.parse(JSON.stringify(value));
             }
 
             createStateSnapshot() {
@@ -11781,10 +11815,11 @@
             renderSidebarFloatMenu() {
                 const menu = document.getElementById('sidebarFloatMenu');
                 if (!menu) return;
+                this.reconcileCategoriesFromWebsites();
                 const categoryIds = this.getOrderedCategoryIds ? this.getOrderedCategoryIds() : Object.keys(this.state.categories || {});
                 const activeCategory = document.querySelector('#navbarCategories .category-tab.active')?.dataset.category || this.state.currentCategory;
                 menu.innerHTML = categoryIds.map(categoryId => {
-                    const name = this.state.categories[categoryId] || categoryId;
+                    const name = this.getCategoryName(categoryId);
                     const count = (this.state.websites[categoryId] || []).length;
                     const activeClass = categoryId === activeCategory ? ' active' : '';
                     return `
@@ -12439,11 +12474,12 @@
             }
 
             getLocalSearchMatches(query) {
+                this.reconcileCategoriesFromWebsites();
                 const categoryIds = this.getOrderedCategoryIds();
                 const results = {};
                 let total = 0;
                 categoryIds.forEach(categoryId => {
-                    const categoryName = this.state.categories[categoryId] || categoryId;
+                    const categoryName = this.getCategoryName(categoryId);
                     const matched = (this.state.websites[categoryId] || []).filter(website =>
                         this.websiteMatchesQuery(website, query, categoryName)
                     );
@@ -12457,9 +12493,15 @@
 
             getSearchSelectableWebsites(searchMatches) {
                 if (!searchMatches) return [];
-                return Object.values(searchMatches.results || {})
-                    .flat()
-                    .filter(website => website.type !== 'folder');
+                return Object.entries(searchMatches.results || {})
+                    .flatMap(([categoryId, websites]) => (websites || [])
+                        .filter(website => website.type !== 'folder')
+                        .map(website => ({
+                            categoryId,
+                            website,
+                            key: this.getWebsiteSelectionKey(categoryId, website)
+                        }))
+                    );
             }
 
             toggleSearchResultsSelection() {
@@ -12467,18 +12509,18 @@
                 const localSearchQuery = this.state.localSearchQuery || '';
                 if (!localSearchQuery) return;
 
-                const selectableWebsites = this.getSearchSelectableWebsites(this.getLocalSearchMatches(localSearchQuery));
-                if (selectableWebsites.length === 0) {
+                const selectableRefs = this.getSearchSelectableWebsites(this.getLocalSearchMatches(localSearchQuery));
+                if (selectableRefs.length === 0) {
                     this.showSaveNotification('当前搜索结果没有可选择的网站');
                     return;
                 }
 
-                const allSelected = selectableWebsites.every(website => this.state.selectedWebsites.has(website.id));
-                selectableWebsites.forEach(website => {
+                const allSelected = selectableRefs.every(item => this.state.selectedWebsites.has(item.key));
+                selectableRefs.forEach(item => {
                     if (allSelected) {
-                        this.state.selectedWebsites.delete(website.id);
+                        this.state.selectedWebsites.delete(item.key);
                     } else {
-                        this.state.selectedWebsites.add(website.id);
+                        this.state.selectedWebsites.add(item.key);
                     }
                 });
 
@@ -12497,6 +12539,7 @@
             renderWebsites() {
                 if (!this.state.bookmarksVisible) return;
 
+                this.reconcileCategoriesFromWebsites();
                 const { websites, batchMode } = this.state;
                 const categoryIds = this.getOrderedCategoryIds();
                 const localSearchQuery = this.state.localSearchQuery || '';
@@ -12507,7 +12550,7 @@
                 let html = '<div class="webstack-page">';
                 if (localSearchQuery) {
                     const searchSelectableWebsites = this.getSearchSelectableWebsites(searchMatches);
-                    const selectedSearchCount = searchSelectableWebsites.filter(website => this.state.selectedWebsites.has(website.id)).length;
+                    const selectedSearchCount = searchSelectableWebsites.filter(item => this.state.selectedWebsites.has(item.key)).length;
                     const allSearchResultsSelected = searchSelectableWebsites.length > 0 && selectedSearchCount === searchSelectableWebsites.length;
                     const searchBatchAction = batchMode && searchSelectableWebsites.length > 0 ? `
                         <button type="button" class="webstack-search-select" onclick="app.toggleSearchResultsSelection()">
@@ -12530,13 +12573,18 @@
                     return;
                 }
                 categoryIds.forEach(categoryId => {
-                    const categoryName = this.state.categories[categoryId] || categoryId;
+                    const categoryName = this.getCategoryName(categoryId);
                     const categoryWebsites = searchMatches ? (searchMatches.results[categoryId] || []) : (websites[categoryId] || []);
                     if (localSearchQuery && categoryWebsites.length === 0) return;
                     const count = categoryWebsites.length;
                     const batchModeClass = batchMode ? 'batch-mode' : '';
-                    const selectableWebsites = categoryWebsites.filter(website => website.type !== 'folder');
-                    const selectedInCategory = selectableWebsites.filter(website => this.state.selectedWebsites.has(website.id)).length;
+                    const selectableWebsites = categoryWebsites
+                        .filter(website => website.type !== 'folder')
+                        .map(website => ({
+                            website,
+                            key: this.getWebsiteSelectionKey(categoryId, website)
+                        }));
+                    const selectedInCategory = selectableWebsites.filter(item => this.state.selectedWebsites.has(item.key)).length;
                     const allSelectedInCategory = selectableWebsites.length > 0 && selectedInCategory === selectableWebsites.length;
                     const batchSectionActions = batchMode ? `
                         <div class="webstack-section-actions">
@@ -12610,6 +12658,65 @@
                 return orderedIds;
             }
 
+            getCategoryName(categoryId) {
+                return this.state.categories?.[categoryId] || categoryId;
+            }
+
+            getWebsiteSelectionKey(categoryId, website) {
+                const websites = this.state.websites?.[categoryId] || [];
+                const index = websites.indexOf(website);
+                return `${categoryId}::${index}::${website?.id || ''}`;
+            }
+
+            reconcileCategoriesFromWebsites() {
+                if (!this.state.categories) {
+                    this.state.categories = {};
+                }
+                if (!this.state.websites) {
+                    this.state.websites = {};
+                }
+
+                let changed = false;
+                Object.keys(this.state.websites).forEach(categoryId => {
+                    if (categoryId && !this.state.categories[categoryId]) {
+                        this.state.categories[categoryId] = categoryId;
+                        changed = true;
+                    }
+                });
+
+                if (changed) {
+                    this.renderCategoryTabsFromState();
+                }
+
+                return changed;
+            }
+
+            renderCategoryTabsFromState() {
+                const defaultCategories = ['ai', 'news', 'shopping', 'entertainment', 'tools'];
+                const navbarAddBtn = document.querySelector('#navbarCategories .add-category-btn');
+                if (!navbarAddBtn) return;
+
+                Object.keys(this.state.categories || {})
+                    .filter(id => !defaultCategories.includes(id))
+                    .forEach(categoryId => {
+                        const existingTab = document.querySelector(`#navbarCategories [data-category="${categoryId}"]`);
+                        if (!existingTab) {
+                            const categoryTab = document.createElement('div');
+                            categoryTab.className = 'category-tab';
+                            categoryTab.dataset.category = categoryId;
+                            categoryTab.draggable = true;
+                            categoryTab.innerHTML = `
+                                <span>${this.escapeHtml(this.getCategoryName(categoryId))}</span>
+                                <span class="category-count">0</span>
+                                <button class="category-rename" title="重命名分类">✎</button>
+                                <button class="category-delete" title="删除分类">×</button>
+                            `;
+                            navbarAddBtn.parentNode.insertBefore(categoryTab, navbarAddBtn);
+                            this.bindCategoryContextMenu(categoryTab);
+                        }
+                    });
+            }
+
             setCurrentCategorySilently(categoryId) {
                 if (!categoryId) return;
                 this.state.currentCategory = categoryId;
@@ -12619,6 +12726,7 @@
             renderWebStackCard(website, categoryId) {
                 const batchMode = this.state.batchMode;
                 const selectedWebsites = this.state.selectedWebsites;
+                const selectionKey = this.getWebsiteSelectionKey(categoryId, website);
                 const isGrid = this.state.currentView === 'grid';
                 const cardClass = isGrid ? 'website-card' : 'website-card-compact';
                 const iconClass = isGrid ? 'website-icon' : 'website-icon-compact';
@@ -12638,19 +12746,15 @@
                     const itemIcons = (website.items || []).slice(0, 3).map(item => {
                         if (item.faviconUrl && item.iconType === 'favicon') {
                             const domain = this.extractDomain(item.url);
+                            const preferredIcon = this.getPreferredFaviconUrl(domain);
                             const apiUrl = this.getFaviconUrl(domain);
                             const onload = this.getIconOnloadHandler(domain);
-                            const onerror = this.getIconOnerrorHandler(domain, apiUrl, defaultIconUrl, true);
-                            if (this.iconCache.has(domain)) {
-                                const cachedUrl = this.iconCache.get(domain);
+                            const onerror = this.getIconOnerrorHandler(domain, apiUrl, defaultIconUrl, preferredIcon.allowApiFallback);
+                            if (this.iconCache.has(this.normalizeIconDomain(domain))) {
+                                const cachedUrl = this.iconCache.get(this.normalizeIconDomain(domain));
                                 return `<img src="${cachedUrl || defaultIconUrl}" data-domain="${domain}" data-managed-icon="true" alt="" data-cached="true" loading="lazy" onload="${onload}" onerror="${onerror}" style="width:100%;height:100%;object-fit:cover;">`;
                             }
-                            if (this.hasRecentIconFailure(domain)) {
-                                return `<img src="${defaultIconUrl}" data-domain="${domain}" data-managed-icon="true" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">`;
-                            }
-                            const staticUrl = this.getStaticFaviconUrl(domain);
-                            const src = staticUrl || apiUrl;
-                            return `<img src="${src}" data-domain="${domain}" data-managed-icon="true" alt="" loading="lazy" onload="${onload}" onerror="${onerror}" style="width:100%;height:100%;object-fit:cover;">`;
+                            return `<img src="${preferredIcon.url}" data-domain="${domain}" data-managed-icon="true" alt="" loading="lazy" onload="${onload}" onerror="${onerror}" style="width:100%;height:100%;object-fit:cover;">`;
                         }
                         if (item.icon && item.icon.startsWith('http')) {
                             return `<img src="${this.escapeHtml(item.icon)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">`;
@@ -12681,7 +12785,7 @@
 
                 const websiteDesc = website.desc && website.desc.trim() ? website.desc.trim() : website.name;
                 const iconHtml = this.renderWebsiteIcon(website, iconClass);
-                const isSelected = selectedWebsites.has(website.id);
+                const isSelected = selectedWebsites.has(selectionKey);
                 const selectedClass = isSelected ? 'selected' : '';
                 const checkboxHtml = batchMode ? `<div class="batch-checkbox ${isSelected ? 'checked' : ''}"></div>` : '';
                 const visitCount = this.getVisitCount(website.id);
@@ -12692,11 +12796,12 @@
                     <a href="${batchMode ? 'javascript:void(0)' : this.escapeHtml(website.url)}"
                        class="${cardClass} ${selectedClass} has-tooltip"
                        data-category-id="${this.escapeHtml(categoryId)}"
+                       data-selection-key="${this.escapeHtml(selectionKey)}"
                        data-tippy-content="${this.escapeHtml(websiteDesc)}"
                        ${batchMode ? '' : 'target="_blank"'}
                        data-website-id="${this.escapeHtml(website.id)}"
                        draggable="${draggableAttr}"
-                       ${batchMode ? `onclick="${actionPrefix} app.toggleWebsiteSelection('${this.escapeJsString(website.id)}'); return false;"` : `onclick="${actionPrefix} app.trackVisit('${this.escapeJsString(website.id)}')"`}>
+                       ${batchMode ? `onclick="${actionPrefix} app.toggleWebsiteSelection('${this.escapeJsString(selectionKey)}'); return false;"` : `onclick="${actionPrefix} app.trackVisit('${this.escapeJsString(website.id)}')"`}>
                         ${checkboxHtml}
                         ${visitBadge}
                         <div class="${menuContainerClass}">
@@ -12749,7 +12854,7 @@
                 try {
                     const cache = {};
                     this.iconCache.forEach((url, domain) => {
-                        cache[domain] = url;
+                        cache[this.normalizeIconDomain(domain)] = url;
                     });
                     localStorage.setItem('coolai_icon_cache', JSON.stringify(cache));
                     logger.debug(`💾 图标缓存已保存: ${Object.keys(cache).length}个域名`);
@@ -12764,7 +12869,7 @@
                     const cache = JSON.parse(localStorage.getItem('coolai_icon_cache') || '{}');
                     let loaded = 0;
                     Object.entries(cache).forEach(([domain, url]) => {
-                        this.iconCache.set(domain, url);
+                        this.iconCache.set(this.normalizeIconDomain(domain), url);
                         loaded++;
                     });
                     if (loaded > 0) {
@@ -12781,11 +12886,12 @@
 
             hasRecentIconFailure(domain) {
                 if (!domain) return false;
-                const failedAt = Number(this.iconFailureCache.get(domain) || 0);
+                const normalized = this.normalizeIconDomain(domain);
+                const failedAt = Number(this.iconFailureCache.get(normalized) || 0);
                 if (!failedAt) return false;
-                const ttl = 12 * 60 * 60 * 1000;
+                const ttl = 30 * 60 * 1000;
                 if (Date.now() - failedAt > ttl) {
-                    this.iconFailureCache.delete(domain);
+                    this.iconFailureCache.delete(normalized);
                     this.debounceSaveIconFailureCache?.();
                     return false;
                 }
@@ -12794,15 +12900,15 @@
 
             markIconFailure(domain) {
                 if (!domain) return;
-                this.iconFailureCache.set(domain, Date.now());
-                this.iconCache.delete(domain);
+                this.iconFailureCache.set(this.normalizeIconDomain(domain), Date.now());
+                this.iconCache.delete(this.normalizeIconDomain(domain));
                 this.debounceSaveIconCache?.();
                 this.debounceSaveIconFailureCache?.();
             }
 
             clearIconFailure(domain) {
                 if (!domain) return;
-                if (this.iconFailureCache.delete(domain)) {
+                if (this.iconFailureCache.delete(this.normalizeIconDomain(domain))) {
                     this.debounceSaveIconFailureCache?.();
                 }
             }
@@ -12823,7 +12929,7 @@
                 try {
                     const cache = JSON.parse(localStorage.getItem('coolai_icon_failures') || '{}');
                     const now = Date.now();
-                    const ttl = 12 * 60 * 60 * 1000;
+                    const ttl = 30 * 60 * 1000;
                     Object.entries(cache).forEach(([domain, timestamp]) => {
                         if (now - Number(timestamp) <= ttl) {
                             this.iconFailureCache.set(domain, Number(timestamp));
@@ -12842,27 +12948,147 @@
                 return `app.handleIconLoadError(this, '${this.escapeJsString(domain)}', '${this.escapeJsString(apiUrl)}', '${this.escapeJsString(defaultIconUrl)}', ${allowApiFallback ? 'true' : 'false'})`;
             }
 
+            normalizeIconDomain(domain) {
+                let normalized = String(domain || '')
+                    .trim()
+                    .toLowerCase()
+                    .replace(/^https?:\/\//, '')
+                    .split('/')[0]
+                    .split(':')[0]
+                    .replace(/^\.+|\.+$/g, '');
+
+                const explicitAliases = {
+                    'www.google.com': 'google.com',
+                    'www.github.com': 'github.com',
+                    'www.youtube.com': 'youtube.com'
+                };
+
+                return explicitAliases[normalized] || normalized;
+            }
+
+            extractIconDomain(url) {
+                try {
+                    const normalized = String(url || '').trim();
+                    if (!normalized) return '';
+                    const parsed = new URL(normalized.startsWith('http') ? normalized : `https://${normalized}`);
+                    return this.normalizeIconDomain(parsed.hostname);
+                } catch {
+                    return this.normalizeIconDomain(url);
+                }
+            }
+
+            getUploadsBaseUrl() {
+                if (window.wpConfig && window.wpConfig.restUrl) {
+                    return window.wpConfig.restUrl.replace('/wp-json/', '/wp-content/uploads/coolai_favicons/');
+                }
+                return 'https://coolai.top/wp-content/uploads/coolai_favicons/';
+            }
+
+            safeFaviconFileName(domain) {
+                return `${domain.replace(/[^a-z0-9.-]/gi, '_')}.png`;
+            }
+
+            legacyFaviconFileName(domain) {
+                const parts = domain.split('.');
+                if (parts.length <= 2) return this.safeFaviconFileName(domain);
+                const legacy = parts.map((part, index) => {
+                    const isMiddle = index > 0 && index < parts.length - 1;
+                    return isMiddle && part.length >= 2 && part.length <= 5 ? `${part}_` : part;
+                }).join('.');
+                return this.safeFaviconFileName(legacy);
+            }
+
+            getFaviconUrlCandidates(domain) {
+                const normalized = this.normalizeIconDomain(domain);
+                if (!normalized) return [];
+
+                const base = this.getUploadsBaseUrl();
+                const domains = [normalized];
+                if (normalized.startsWith('www.')) {
+                    domains.push(normalized.slice(4));
+                }
+
+                const urls = [];
+                domains.forEach(item => {
+                    [
+                        this.safeFaviconFileName(item),
+                        this.legacyFaviconFileName(item),
+                        `${item}.png`
+                    ].forEach(file => {
+                        const url = `${base}${file}`;
+                        if (!urls.includes(url)) urls.push(url);
+                    });
+                });
+
+                const apiUrl = this.getFaviconUrl(normalized);
+                if (apiUrl && !urls.includes(apiUrl)) urls.push(apiUrl);
+                return urls;
+            }
+            isServerStaticIconUrl(url) {
+                return !!url && url.includes('/wp-content/uploads/coolai_favicons/');
+            }
+
+            getPreferredFaviconUrl(domain) {
+                const normalized = this.normalizeIconDomain(domain);
+                const candidates = this.getFaviconUrlCandidates(normalized);
+                const staticUrl = candidates[0] || '';
+                const cachedUrl = this.iconCache.get(normalized);
+                if (cachedUrl && cachedUrl !== this.getDefaultIconUrl()) {
+                    if (staticUrl && !this.isServerStaticIconUrl(cachedUrl)) {
+                        return {
+                            url: staticUrl,
+                            allowApiFallback: true
+                        };
+                    }
+                    return {
+                        url: cachedUrl,
+                        allowApiFallback: this.isServerStaticIconUrl(cachedUrl)
+                    };
+                }
+
+                if (staticUrl) {
+                    return {
+                        url: staticUrl,
+                        allowApiFallback: true
+                    };
+                }
+
+                return {
+                    url: this.getFaviconUrl(normalized),
+                    allowApiFallback: false
+                };
+            }
+
             handleIconLoadSuccess(img, domain) {
                 const currentSrc = img?.currentSrc || img?.src || '';
                 const defaultIconUrl = this.getDefaultIconUrl();
                 if (!domain || !currentSrc || currentSrc === defaultIconUrl) return;
-                this.iconCache.set(domain, currentSrc);
+                this.iconCache.set(this.normalizeIconDomain(domain), currentSrc);
                 this.clearIconFailure(domain);
                 this.debounceSaveIconCache?.();
             }
 
             handleIconLoadError(img, domain, apiUrl = '', defaultIconUrl = '', allowApiFallback = false) {
                 if (!img) return;
-                const currentSrc = img.currentSrc || img.src || '';
+                const normalized = this.normalizeIconDomain(domain);
+                const currentSrc = (img.currentSrc || img.src || '').split('?')[0];
                 const fallbackUrl = defaultIconUrl || this.getDefaultIconUrl();
+                const candidates = this.getFaviconUrlCandidates(normalized);
+                const currentIndex = candidates.findIndex(url => url === currentSrc || currentSrc.endsWith(url.split('/').pop()));
+                const nextCandidate = currentIndex >= 0 ? candidates[currentIndex + 1] : candidates.find(url => url !== currentSrc);
 
-                if (allowApiFallback && apiUrl && currentSrc && currentSrc !== apiUrl && currentSrc.includes('/wp-content/uploads/coolai_favicons/')) {
+                if (nextCandidate && img.src !== nextCandidate && nextCandidate !== fallbackUrl) {
+                    img.src = nextCandidate;
+                    return;
+                }
+
+                if (allowApiFallback && apiUrl && currentSrc !== apiUrl) {
                     img.src = apiUrl;
                     return;
                 }
 
-                this.markIconFailure(domain);
-                if (currentSrc !== fallbackUrl) {
+                this.markIconFailure(normalized);
+                if (img.src !== fallbackUrl) {
                     img.src = fallbackUrl;
                     return;
                 }
@@ -13076,6 +13302,7 @@
                 document.getElementById('confirmMessage').textContent = message;
                 document.getElementById('confirmOk').textContent = confirmText;
                 document.getElementById('confirmCancel').textContent = cancelText;
+                document.getElementById('confirmCancel').style.display = cancelText ? 'inline-block' : 'none';
 
                 const icon = document.getElementById('confirmIcon');
                 const okBtn = document.getElementById('confirmOk');
@@ -14962,7 +15189,7 @@
                 button.disabled = true;
                 
                 try {
-                    this.iconCache.delete(domain);
+                    this.iconCache.delete(this.normalizeIconDomain(domain));
                     this.clearIconFailure(domain);
                     this.debounceSaveIconCache?.();
                     // 调用 API 强制刷新 (refresh=true 会触发后端重新下载并覆盖本地文件)
@@ -14978,28 +15205,48 @@
                         cache: 'reload'
                     });
                     
-                    // 更新前端显示
-                    const { currentCategory } = this.state;
-                    const websites = this.state.websites[currentCategory] || [];
-                    const website = websites.find(site => site.id === websiteId);
+                    // 更新所有相同域名的卡片，避免只刷新当前这一张。
+                    const timestamp = Date.now();
+                    const staticUrl = this.getStaticFaviconUrl(domain);
+                    const freshIconUrl = staticUrl
+                        ? `${staticUrl}?t=${timestamp}`
+                        : `${restUrl}coolai/v1/favicon?domain=${encodeURIComponent(domain)}&t=${timestamp}`;
+                    let updatedCount = 0;
+
+                    Object.values(this.state.websites || {}).forEach(websites => {
+                        (websites || []).forEach(website => {
+                            if (website.type === 'folder' && Array.isArray(website.items)) {
+                                website.items.forEach(item => {
+                                    if (this.extractDomain(item.url) === domain) {
+                                        item.faviconUrl = freshIconUrl;
+                                        item.iconType = 'favicon';
+                                        updatedCount += 1;
+                                    }
+                                });
+                                return;
+                            }
+
+                            if (this.extractDomain(website.url) === domain) {
+                                website.faviconUrl = freshIconUrl;
+                                website.iconType = 'favicon';
+                                updatedCount += 1;
+                            }
+                        });
+                    });
+
+                    this.iconCache.set(domain, freshIconUrl);
+                    this.debounceSaveIconCache?.();
                     
-                    if (website) {
-                        // 关键：给图片 URL 加上时间戳，强制浏览器重新加载图片
-                        const timestamp = Date.now();
-                        website.faviconUrl = `${restUrl}coolai/v1/favicon?domain=${encodeURIComponent(domain)}&t=${timestamp}`;
-                        website.iconType = 'favicon';
-                        
-                        // 保存更新
-                        await this.saveWebsites();
-                        
-                        // 确保分类UI正确显示
-                        this.updateCategoryUI();
-                        
-                        // 重新渲染当前分类
-                        this.renderWebsites();
-                        
-                        this.showSaveNotification('图标已更新并缓存到服务器');
-                    }
+                    // 保存更新
+                    await this.saveWebsites();
+                    
+                    // 确保分类UI正确显示
+                    this.updateCategoryUI();
+                    
+                    // 重新渲染全部可见卡片
+                    this.renderWebsites();
+                    
+                    this.showSaveNotification(`图标已更新，已同步 ${updatedCount || 1} 个同域名卡片`);
                 } catch (error) {
                     console.error('刷新图标失败:', error);
                     this.showSaveNotification('刷新失败，请重试');
@@ -15112,50 +15359,71 @@
             }
 
             // 切换网站选择状态
-            toggleWebsiteSelection(websiteId) {
-                if (this.state.selectedWebsites.has(websiteId)) {
-                    this.state.selectedWebsites.delete(websiteId);
+            toggleWebsiteSelection(selectionKey) {
+                if (this.state.selectedWebsites.has(selectionKey)) {
+                    this.state.selectedWebsites.delete(selectionKey);
                 } else {
-                    this.state.selectedWebsites.add(websiteId);
+                    this.state.selectedWebsites.add(selectionKey);
                 }
                 
                 this.updateBatchInfo();
-                
-                // 直接更新卡片的选中状态
-                const card = document.querySelector(`[data-website-id="${websiteId}"]`);
-                const checkbox = card?.querySelector('.batch-checkbox');
-                
-                if (this.state.selectedWebsites.has(websiteId)) {
-                    card?.classList.add('selected');
-                    checkbox?.classList.add('checked');
-                } else {
-                    card?.classList.remove('selected');
-                    checkbox?.classList.remove('checked');
-                }
+                this.updateSelectedCardUI(selectionKey);
+                this.updateVisibleBatchSectionCounts();
             }
 
-            getBatchSelectableWebsites(categoryId) {
+            updateSelectedCardUI(selectionKey) {
+                document.querySelectorAll('[data-selection-key]').forEach(card => {
+                    if (card.dataset.selectionKey !== selectionKey) return;
+
+                    const isSelected = this.state.selectedWebsites.has(selectionKey);
+                    const checkbox = card.querySelector('.batch-checkbox');
+                    card.classList.toggle('selected', isSelected);
+                    checkbox?.classList.toggle('checked', isSelected);
+                });
+            }
+
+            updateVisibleBatchSectionCounts() {
+                if (!this.state.batchMode) return;
+
+                document.querySelectorAll('.webstack-section[data-category-id]').forEach(section => {
+                    const categoryId = section.dataset.categoryId;
+                    const selectableRefs = this.getBatchSelectableWebsiteRefs(categoryId);
+                    const selectedInCategory = selectableRefs.filter(item => this.state.selectedWebsites.has(item.key)).length;
+                    const button = section.querySelector('.webstack-section-select');
+                    if (!button) return;
+
+                    const allSelectedInCategory = selectableRefs.length > 0 && selectedInCategory === selectableRefs.length;
+                    button.textContent = `${allSelectedInCategory ? '取消全选' : '全选'} ${selectedInCategory}/${selectableRefs.length}`;
+                });
+            }
+
+            getBatchSelectableWebsiteRefs(categoryId) {
                 const localSearchQuery = this.state.localSearchQuery || '';
                 const categoryWebsites = localSearchQuery
                     ? ((this.getLocalSearchMatches(localSearchQuery).results || {})[categoryId] || [])
                     : (this.state.websites[categoryId] || []);
-                return categoryWebsites.filter(website => website.type !== 'folder');
+                return categoryWebsites
+                    .filter(website => website.type !== 'folder')
+                    .map(website => ({
+                        website,
+                        key: this.getWebsiteSelectionKey(categoryId, website)
+                    }));
             }
 
             toggleCategoryWebsiteSelection(categoryId) {
                 if (!this.state.batchMode) return;
-                const selectableWebsites = this.getBatchSelectableWebsites(categoryId);
-                if (selectableWebsites.length === 0) {
+                const selectableRefs = this.getBatchSelectableWebsiteRefs(categoryId);
+                if (selectableRefs.length === 0) {
                     this.showSaveNotification('该分类没有可选择的网站');
                     return;
                 }
 
-                const allSelected = selectableWebsites.every(website => this.state.selectedWebsites.has(website.id));
-                selectableWebsites.forEach(website => {
+                const allSelected = selectableRefs.every(item => this.state.selectedWebsites.has(item.key));
+                selectableRefs.forEach(item => {
                     if (allSelected) {
-                        this.state.selectedWebsites.delete(website.id);
+                        this.state.selectedWebsites.delete(item.key);
                     } else {
-                        this.state.selectedWebsites.add(website.id);
+                        this.state.selectedWebsites.add(item.key);
                     }
                 });
 
@@ -15231,31 +15499,55 @@
                     confirmText: '删除',
                     cancelText: '取消',
                     onConfirm: () => {
-                        this.recordOperation({
-                            type: 'stateSnapshot',
-                            data: {
-                                label: '批量删除',
-                                snapshot: this.createStateSnapshot()
-                            }
-                        });
-                        const affectedCategories = new Set();
-                        Object.keys(this.state.websites).forEach(categoryId => {
-                            const websites = this.state.websites[categoryId] || [];
-                            const nextWebsites = websites.filter(site => !this.state.selectedWebsites.has(site.id));
-                            if (nextWebsites.length !== websites.length) {
-                                affectedCategories.add(categoryId);
-                                this.state.websites[categoryId] = nextWebsites;
-                            }
-                        });
-                        
-                        this.state.selectedWebsites.clear();
-                        this.saveWebsites();
-                        this.renderWebsites();
-                        affectedCategories.forEach(categoryId => this.updateCategoryCount(categoryId));
-                        this.updateBatchInfo();
-                        this.showSaveNotification(`已删除 ${count} 个网站`);
+                        try {
+                            this.confirmBatchDeleteWebsites();
+                        } catch (error) {
+                            console.error('批量删除失败:', error);
+                            this.showSaveNotification(`批量删除失败：${error.message || '请查看控制台'}`);
+                        }
                     }
                 });
+            }
+
+            confirmBatchDeleteWebsites() {
+                const selectedKeys = new Set(this.state.selectedWebsites);
+                if (selectedKeys.size === 0) {
+                    throw new Error('没有选中的网站');
+                }
+
+                this.recordOperation({
+                    type: 'stateSnapshot',
+                    data: {
+                        label: '批量删除',
+                        snapshot: this.createStateSnapshot()
+                    }
+                });
+
+                let deletedCount = 0;
+                const affectedCategories = new Set();
+                Object.keys(this.state.websites).forEach(categoryId => {
+                    const websites = this.state.websites[categoryId] || [];
+                    const nextWebsites = websites.filter(site => {
+                        const selected = selectedKeys.has(this.getWebsiteSelectionKey(categoryId, site));
+                        if (selected) deletedCount += 1;
+                        return !selected;
+                    });
+                    if (nextWebsites.length !== websites.length) {
+                        affectedCategories.add(categoryId);
+                        this.state.websites[categoryId] = nextWebsites;
+                    }
+                });
+
+                if (deletedCount === 0) {
+                    throw new Error('选中项已失效，请重新选择');
+                }
+                
+                this.state.selectedWebsites.clear();
+                this.saveWebsites();
+                this.renderWebsites();
+                affectedCategories.forEach(categoryId => this.updateCategoryCount(categoryId));
+                this.updateBatchInfo();
+                this.showSaveNotification(`已删除 ${deletedCount} 个网站`);
             }
 
             // 显示批量移动对话框
@@ -15287,7 +15579,7 @@
                         </div>
                         <div class="custom-confirm-body">
                             <p class="custom-confirm-message">选择要移动到的分类：</p>
-                            <select id="batchMoveCategory" class="form-select" style="width: 100%; margin-top: 12px;">
+                            <select id="batchMoveDialogCategory" class="form-select" style="width: 100%; margin-top: 12px;">
                                 ${categoryOptions}
                             </select>
                         </div>
@@ -15304,7 +15596,7 @@
                 const overlay = dialog.querySelector('.custom-confirm-overlay');
                 const cancelBtn = dialog.querySelector('.custom-confirm-cancel');
                 const okBtn = dialog.querySelector('.custom-confirm-ok');
-                const selectEl = dialog.querySelector('#batchMoveCategory');
+                const selectEl = dialog.querySelector('#batchMoveDialogCategory');
 
                 const closeDialog = () => {
                     dialog.classList.remove('show');
@@ -15347,7 +15639,7 @@
 
                     const remainingWebsites = [];
                     websites.forEach(site => {
-                        if (this.state.selectedWebsites.has(site.id)) {
+                        if (this.state.selectedWebsites.has(this.getWebsiteSelectionKey(categoryId, site))) {
                             websitesToMove.push(site);
                             affectedCategories.add(categoryId);
                         } else {
@@ -15370,6 +15662,13 @@
             }
 
             deleteCategory(categoryId) {
+                const hasCategory = !!this.state.categories?.[categoryId];
+                const hasWebsites = Object.prototype.hasOwnProperty.call(this.state.websites || {}, categoryId);
+                if (!categoryId || (!hasCategory && !hasWebsites)) {
+                    this.showSaveNotification('未找到要删除的分类', 'error');
+                    return;
+                }
+
                 // 只有AI工具分类不能删除
                 if (categoryId === 'ai') {
                     this.showConfirmDialog({
@@ -15387,12 +15686,23 @@
                     return;
                 }
 
-                const categoryName = this.state.categories[categoryId] || '该分类';
+                const categoryName = this.getCategoryName(categoryId);
                 const websiteCount = (this.state.websites[categoryId] || []).length;
                 this.remindBackupIfNeeded('删除分类');
                 
                 // 使用新的删除分类弹窗
                 this.showDeleteCategoryModal(categoryId, categoryName, websiteCount);
+            }
+
+            exitBatchMode() {
+                this.state.batchMode = false;
+                this.state.selectedWebsites.clear();
+
+                const toolbar = document.getElementById('batchToolbar');
+                toolbar?.classList.remove('show');
+
+                this.updateBatchInfo();
+                this.renderWebsites();
             }
             
             // 显示删除分类弹窗（v3风格）
@@ -15402,6 +15712,12 @@
                 const options = document.getElementById('deleteCategoryOptions');
                 const targetSelect = document.getElementById('targetCategorySelect');
                 const targetDropdown = document.getElementById('deleteCategoryTarget');
+
+                if (!modal || !message || !options || !targetSelect || !targetDropdown) {
+                    console.error('删除分类弹窗元素缺失');
+                    this.showSaveNotification('删除分类弹窗初始化失败', 'error');
+                    return;
+                }
                 
                 // 设置消息
                 message.innerHTML = `确定要删除分类 <strong>"${this.escapeHtml(categoryName)}"</strong> 吗？`;
@@ -15469,9 +15785,41 @@
                 
                 cancelBtn.onclick = closeModal;
                 
-                confirmBtn.onclick = () => {
+                confirmBtn.onclick = (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
                     const action = document.querySelector('input[name="deleteAction"]:checked')?.value || 'delete';
 
+                    try {
+                        this.confirmDeleteCategory(categoryId, {
+                            action,
+                            websiteCount,
+                            targetCategory: targetDropdown.value
+                        });
+                        closeModal();
+                    } catch (error) {
+                        console.error('删除分类失败:', error);
+                        this.showSaveNotification(`删除分类失败：${error.message || '请查看控制台'}`);
+                    }
+                };
+                
+                // 显示弹窗
+                modal.classList.add('show');
+            }
+
+            confirmDeleteCategory(categoryId, { action = 'delete', websiteCount = 0, targetCategory = '' } = {}) {
+                const hasCategory = !!this.state.categories?.[categoryId];
+                const hasWebsites = Object.prototype.hasOwnProperty.call(this.state.websites || {}, categoryId);
+                if (!categoryId || (!hasCategory && !hasWebsites)) {
+                    throw new Error('未找到要删除的分类');
+                }
+
+                if (action === 'move' && websiteCount > 0 && !targetCategory) {
+                    throw new Error('请选择目标分类');
+                }
+
+                try {
                     this.recordOperation({
                         type: 'stateSnapshot',
                         data: {
@@ -15479,58 +15827,57 @@
                             snapshot: this.createStateSnapshot()
                         }
                     });
-                    
-                    if (action === 'move' && websiteCount > 0) {
-                        const targetId = targetDropdown.value;
-                        if (!targetId) {
-                            alert('请选择目标分类');
-                            return;
-                        }
-                        // 移动网站到目标分类
-                        const websites = this.state.websites[categoryId] || [];
-                        if (!this.state.websites[targetId]) {
-                            this.state.websites[targetId] = [];
-                        }
-                        this.state.websites[targetId].push(...websites);
-                        this.updateCategoryCount(targetId);
+                } catch (error) {
+                    console.warn('记录撤销快照失败，继续删除分类:', error);
+                }
+
+                const movedCount = (this.state.websites[categoryId] || []).length;
+                let targetName = '';
+
+                if (action === 'move' && movedCount > 0) {
+                    targetName = this.getCategoryName(targetCategory) || '目标分类';
+                    if (!this.state.websites[targetCategory]) {
+                        this.state.websites[targetCategory] = [];
                     }
-                    
-                    // 删除分类
-                    delete this.state.categories[categoryId];
-                    delete this.state.websites[categoryId];
-                    this.state.categoryOrder = this.state.categoryOrder.filter(id => id !== categoryId);
-                    this.state.selectedWebsites.clear();
-                    
-                    // 从所有位置删除该分类标签
-                    document.querySelectorAll(`[data-category="${categoryId}"]`).forEach(tab => tab.remove());
-                    
-                    this.saveCategories();
-                    this.saveWebsites();
-                    this.saveCategoryOrder();
-                    
-                    if (this.state.currentCategory === categoryId) {
-                        const firstCategory = document.querySelector('.category-tab');
-                        if (firstCategory) {
-                            this.switchCategory(firstCategory.dataset.category);
-                        }
-                    } else {
-                        this.updateUI();
-                        this.renderWebsites();
+                    this.state.websites[targetCategory].push(...this.state.websites[categoryId]);
+                }
+
+                delete this.state.categories[categoryId];
+                delete this.state.websites[categoryId];
+                this.state.categoryOrder = (this.state.categoryOrder || []).filter(item => {
+                    const id = typeof item === 'string' ? item : item?.id;
+                    return id !== categoryId;
+                });
+                this.state.selectedWebsites.clear();
+
+                document.querySelectorAll('.category-tab').forEach(tab => {
+                    if (tab.dataset.category === categoryId) {
+                        tab.remove();
                     }
-                    this.updateBatchInfo();
-                    
-                    closeModal();
-                    
-                    if (action === 'move' && websiteCount > 0) {
-                        const targetName = this.state.categories[targetDropdown.value];
-                        this.showSaveNotification(`分类已删除，${websiteCount} 个网站已移动到"${targetName}"`);
-                    } else {
-                        this.showSaveNotification('分类已删除');
-                    }
-                };
-                
-                // 显示弹窗
-                modal.classList.add('show');
+                });
+
+                const nextCategory = this.state.currentCategory === categoryId
+                    ? (this.getOrderedCategoryIds().find(id => this.state.categories[id]) || Object.keys(this.state.categories)[0] || '')
+                    : this.state.currentCategory;
+
+                if (nextCategory) {
+                    this.state.currentCategory = nextCategory;
+                }
+
+                this.saveCategories();
+                this.saveWebsites();
+                this.saveCategoryOrder();
+                this.saveSettings();
+                this.updateUI();
+                this.renderWebsites();
+                this.updateAllCategoryCounts();
+                this.updateBatchInfo();
+
+                if (action === 'move' && movedCount > 0) {
+                    this.showSaveNotification(`分类已删除，${movedCount} 个网站已移动到"${targetName}"`);
+                } else {
+                    this.showSaveNotification('分类已删除');
+                }
             }
 
             // 通知
@@ -15745,19 +16092,19 @@
             // 渲染网站图标（支持favicon和本地图标兜底）+ 🚀 图标缓存优化
             renderWebsiteIcon(website, iconClass) {
                 const defaultIconUrl = this.getDefaultIconUrl();
-                const domain = this.extractDomain(website.url);
+                const domain = this.extractIconDomain(website.url);
                 
                 // 优先级1: 如果有有效的favicon URL
                 if (website.faviconUrl && website.iconType === 'favicon') {
-                    // 智能加载策略：静态文件 -> API -> 默认图标
-                    const staticUrl = this.getStaticFaviconUrl(domain);
+                    // 智能加载策略：已知成功URL -> API统一判断服务器缓存/抓取 -> 默认图标
+                    const preferredIcon = this.getPreferredFaviconUrl(domain);
                     const apiUrl = this.getFaviconUrl(domain);
                     const onload = this.getIconOnloadHandler(domain);
-                    const onerror = this.getIconOnerrorHandler(domain, apiUrl, defaultIconUrl, !!staticUrl);
+                    const onerror = this.getIconOnerrorHandler(domain, apiUrl, defaultIconUrl, preferredIcon.allowApiFallback);
                     
                     // 🚀 缓存优化：检查是否已有成功加载的URL
-                    if (this.iconCache.has(domain)) {
-                        const cachedUrl = this.iconCache.get(domain);
+                    if (this.iconCache.has(this.normalizeIconDomain(domain))) {
+                        const cachedUrl = this.iconCache.get(this.normalizeIconDomain(domain));
                         if (cachedUrl && cachedUrl !== defaultIconUrl) {
                             // ✅ 已缓存：直接使用缓存URL，不绑定任何事件
                             return `
@@ -15774,14 +16121,9 @@
                         }
                     }
 
-                    if (this.hasRecentIconFailure(domain)) {
-                        return `<img src="${defaultIconUrl}" alt="${website.name}" data-domain="${domain}" data-managed-icon="true" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;">`;
-                    }
-                    
-                    // ❌ 未缓存：构建fallback链
-                    const finalUrl = staticUrl || apiUrl;
+                    // ❌ 未缓存：直接走API，避免盲试静态文件造成404等待。
                     return `
-                        <img src="${finalUrl}" 
+                        <img src="${preferredIcon.url}" 
                              alt="${website.name}"
                              data-domain="${domain}"
                              data-managed-icon="true"
@@ -15795,7 +16137,7 @@
                 // 优先级2: 如果有自定义http图标
                 if (website.icon && website.icon.startsWith('http')) {
                     // ✅ 如果已缓存，直接使用
-                    if (this.iconCache.has(domain)) {
+                    if (this.iconCache.has(this.normalizeIconDomain(domain))) {
                         return `<img src="${website.icon}" alt="${website.name}" data-domain="${domain}" data-managed-icon="true" data-cached="true" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;" onload="${this.getIconOnloadHandler(domain)}" onerror="${this.getIconOnerrorHandler(domain, '', defaultIconUrl, false)}">`;
                     }
                     
@@ -16636,35 +16978,8 @@
 
             // 恢复自定义分类
             restoreCustomCategories() {
-                const defaultCategories = ['ai', 'news', 'shopping', 'entertainment', 'tools'];
-                const customCategories = Object.keys(this.state.categories).filter(
-                    id => !defaultCategories.includes(id)
-                );
-
-                if (customCategories.length === 0) return;
-
-                const navbarAddBtn = document.querySelector('#navbarCategories .add-category-btn');
-                if (!navbarAddBtn) return;
-
-                customCategories.forEach(categoryId => {
-                    const existingTab = document.querySelector(`#navbarCategories [data-category="${categoryId}"]`);
-                    if (!existingTab) {
-                        const categoryTab = document.createElement('div');
-                        categoryTab.className = 'category-tab';
-                        categoryTab.dataset.category = categoryId;
-                        categoryTab.draggable = true;
-                        categoryTab.innerHTML = `
-                            <span>${this.escapeHtml(this.state.categories[categoryId])}</span>
-                            <span class="category-count">0</span>
-                            <button class="category-rename" title="重命名分类">✎</button>
-                            <button class="category-delete" title="删除分类">×</button>
-                        `;
-                        navbarAddBtn.parentNode.insertBefore(categoryTab, navbarAddBtn);
-                        
-                        // 绑定右键菜单事件
-                        this.bindCategoryContextMenu(categoryTab);
-                    }
-                });
+                this.reconcileCategoriesFromWebsites();
+                this.renderCategoryTabsFromState();
             }
 
             // 恢复分类顺序
@@ -16728,14 +17043,9 @@
 
             // 获取静态Favicon URL（直接访问文件，绕过PHP）
             getStaticFaviconUrl(domain) {
-                if (window.wpConfig && window.wpConfig.restUrl) {
-                    // 假设 uploads 目录结构：/wp-content/uploads/coolai_favicons/
-                    // 通过替换 restUrl (/wp-json/) 来推导
-                    return window.wpConfig.restUrl.replace('/wp-json/', '/wp-content/uploads/coolai_favicons/') + domain + '.png';
-                }
-                return null;
+                const candidates = this.getFaviconUrlCandidates(domain).filter(url => this.isServerStaticIconUrl(url));
+                return candidates.length > 0 ? candidates[0] : null;
             }
-
             async fetchWebsiteInfo(url) {
                 // 获取网站信息
                 const domain = this.extractDomain(url);

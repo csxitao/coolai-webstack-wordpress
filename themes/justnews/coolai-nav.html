@@ -1214,6 +1214,23 @@
             height: 100%;
             object-fit: cover;
         }
+        .website-icon .icon-fallback-text,
+        .website-icon-compact .icon-fallback-text,
+        .folder-item-icon .icon-fallback-text,
+        .folder-icon-item .icon-fallback-text,
+        .folder-icon-item-compact .icon-fallback-text {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(135deg, #eef2ff 0%, #e0f2fe 100%);
+            color: #334155;
+            font-weight: 700;
+            line-height: 1;
+            user-select: none;
+        }
 
         .website-title {
             font-size: 16px;
@@ -6925,6 +6942,7 @@
                 
                 // 图标缓存：存储已加载的图标URL，避免重复加载
                 this.iconCache = new Map();
+                this.iconFailCache = new Map();
                 
                 // 定时器ID存储（用于清理）
                 this.timers = {
@@ -9464,64 +9482,8 @@
                 if (!grid) return;
                 
                 let html = '';
-                const defaultIconUrl = 'https://coolai.top/wp-content/uploads/ico.png';
-                
                 folder.items.forEach(item => {
-                    // 使用完整的图标fallback逻辑 + 🚀 缓存支持
-                    let iconHtml = '';
-                    const domain = this.extractDomain(item.url);
-                    
-                    // 优先级1: faviconUrl (网站图标)
-                    if (item.faviconUrl && item.iconType === 'favicon') {
-                        const staticUrl = this.getStaticFaviconUrl(domain);
-                        const apiUrl = this.getFaviconUrl(domain);
-                        
-                        // 🚀 优先检查缓存
-                        if (this.iconCache.has(domain)) {
-                            const cachedUrl = this.iconCache.get(domain);
-                            if (cachedUrl && cachedUrl !== defaultIconUrl) {
-                                iconHtml = `<img src="${cachedUrl}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" data-cached="true" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;">`;
-                            } else {
-                                // 缓存了默认图标，直接使用
-                                iconHtml = `<img src="${defaultIconUrl}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;">`;
-                            }
-                        } else {
-                            // 未缓存：构建fallback链
-                            const finalUrl = staticUrl || apiUrl;
-                            if (staticUrl) {
-                                const onerror = `if(this.src!=='${apiUrl}'){this.src='${apiUrl}';}else if(this.src!=='${defaultIconUrl}'){this.src='${defaultIconUrl}';}`;
-                                const onload = `app.iconCache.set('${domain}', this.src); app.debounceSaveIconCache();`;
-                                iconHtml = `<img src="${finalUrl}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;" onload="${onload}" onerror="${onerror}">`;
-                            } else {
-                                const onload = `app.iconCache.set('${domain}', this.src); app.debounceSaveIconCache();`;
-                                const onerror = `if(this.src!=='${defaultIconUrl}'){this.src='${defaultIconUrl}';}`;
-                                iconHtml = `<img src="${finalUrl}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;" onload="${onload}" onerror="${onerror}">`;
-                            }
-                        }
-                    } 
-                    // 优先级2: 自定义http图标
-                    else if (item.icon && item.icon.startsWith('http')) {
-                        // 如果已缓存，直接使用
-                        if (this.iconCache.has(domain)) {
-                            iconHtml = `<img src="${this.escapeHtml(item.icon)}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;">`;
-                        } else {
-                            const onload = `app.iconCache.set('${domain}', this.src); app.debounceSaveIconCache();`;
-                            const onerror = `if(this.src!=='${defaultIconUrl}'){this.src='${defaultIconUrl}';}`;
-                            iconHtml = `<img src="${this.escapeHtml(item.icon)}" alt="${this.escapeHtml(item.name)}" data-domain="${domain}" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;" onload="${onload}" onerror="${onerror}">`;
-                        }                    } 
-                    // 优先级3: emoji或文本图标
-                    else if (item.icon && !item.icon.startsWith('http')) {
-                        iconHtml = `<span style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; line-height: 1; padding-top: 1px;">${this.escapeHtml(item.icon)}</span>`;
-                    } 
-                    // 优先级4: fallback图标
-                    else if (item.iconFallback && !item.iconFallback.startsWith('http')) {
-                        iconHtml = `<span style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; line-height: 1; padding-top: 1px;">${this.escapeHtml(item.iconFallback)}</span>`;
-                    } 
-                    // 优先级5: 默认图标
-                    else {
-                        iconHtml = `<img src="${defaultIconUrl}" alt="默认图标" data-domain="${domain}" style="width: 100%; height: 100%; object-fit: contain;">`;
-                    }
-                    
+                    const iconHtml = this.renderWebsiteIcon(item, 'website-icon-compact');
                     // 获取网站描述：优先使用自定义描述，否则显示网站名称
                     const websiteDesc = item.desc && item.desc.trim() ? item.desc.trim() : item.name;
                     
@@ -10759,55 +10721,9 @@
                         const folderIconClass = isGrid ? 'folder-icon-stack' : 'folder-icon-stack-compact';
                         const folderIconItemClass = isGrid ? 'folder-icon-item' : 'folder-icon-item-compact';
                         const folderCountClass = isGrid ? 'folder-count' : 'folder-count-compact';
-                        const defaultIconUrl = 'https://coolai.top/wp-content/uploads/ico.png';
-                        
-                        // 获取文件夹内的网站图标（使用完整fallback逻辑）+ 🚀 缓存支持
+                        // 获取文件夹内的网站图标（复用统一图标加载规则）
                         const itemIcons = website.items.slice(0, 3).map(item => {
-                            // 优先级1: faviconUrl
-                            if (item.faviconUrl && item.iconType === 'favicon') {
-                                const domain = this.extractDomain(item.url);
-                                
-                                // 🚀 优先检查缓存
-                                if (this.iconCache.has(domain)) {
-                                    const cachedUrl = this.iconCache.get(domain);
-                                    if (cachedUrl && cachedUrl !== defaultIconUrl) {
-                                        return `<img src="${cachedUrl}" data-domain="${domain}" alt="" data-cached="true" loading="lazy" style="width:100%;height:100%;object-fit:cover;">`;
-                                    } else {
-                                        return `<img src="${defaultIconUrl}" data-domain="${domain}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">`;
-                                    }
-                                }
-                                
-                                // 未缓存：构建fallback链
-                                const staticUrl = this.getStaticFaviconUrl(domain);
-                                const apiUrl = this.getFaviconUrl(domain);
-                                const src = staticUrl || apiUrl;
-                                const onerror = staticUrl ? `if(this.src!=='${apiUrl}'){this.src='${apiUrl}';}else if(this.src!=='${defaultIconUrl}'){this.src='${defaultIconUrl}';}` : `if(this.src!=='${defaultIconUrl}'){this.src='${defaultIconUrl}';}`;
-                                const onload = `app.iconCache.set('${domain}', this.src); app.debounceSaveIconCache();`;
-                                return `<img src="${src}" data-domain="${domain}" alt="" loading="lazy" onload="${onload}" onerror="${onerror}" style="width:100%;height:100%;object-fit:cover;">`;
-                            }
-                            // 优先级2: 自定义http图标
-                            if (item.icon && item.icon.startsWith('http')) {
-                                const domain = this.extractDomain(item.url);
-                                
-                                // 如果已缓存，直接使用
-                                if (this.iconCache.has(domain)) {
-                                    return `<img src="${this.escapeHtml(item.icon)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">`;
-                                }
-                                
-                                const onload = `app.iconCache.set('${domain}', this.src); app.debounceSaveIconCache();`;
-                                const onerror = `if(this.src!=='${defaultIconUrl}'){this.src='${defaultIconUrl}';}`;
-                                return `<img src="${this.escapeHtml(item.icon)}" alt="" loading="lazy" onload="${onload}" onerror="${onerror}" style="width:100%;height:100%;object-fit:cover;">`;
-                            }
-                            // 优先级3: emoji或文本图标
-                            if (item.icon && !item.icon.startsWith('http')) {
-                                return this.escapeHtml(item.icon);
-                            }
-                            // 优先级4: fallback图标
-                            if (item.iconFallback && !item.iconFallback.startsWith('http')) {
-                                return this.escapeHtml(item.iconFallback);
-                            }
-                            // 优先级5: 默认图标
-                            return `<img src="${defaultIconUrl}" alt="" style="width:100%;height:100%;object-fit:cover;">`;
+                            return this.renderWebsiteIcon(item, folderIconItemClass);
                         });
                         
                         // 补充空位
@@ -10906,7 +10822,7 @@
                     if (ws.type === 'folder') {
                         if (ws.items) ws.items.forEach(check);
                     } else if (ws.faviconUrl && ws.iconType === 'favicon') {
-                        this.iconCache.has(this.extractDomain(ws.url)) ? hits++ : misses++;
+                        this.iconCache.has(this.extractIconDomain(ws.url)) ? hits++ : misses++;
                     }
                 };
                 websites.forEach(check);
@@ -10922,12 +10838,21 @@
                 try {
                     const cache = {};
                     this.iconCache.forEach((url, domain) => {
-                        cache[domain] = url;
+                        cache[this.normalizeIconDomain(domain)] = url;
                     });
+
+                    const failCache = {};
+                    if (this.iconFailCache) {
+                        this.iconFailCache.forEach((ts, domain) => {
+                            failCache[this.normalizeIconDomain(domain)] = ts;
+                        });
+                    }
+
                     localStorage.setItem('coolai_icon_cache', JSON.stringify(cache));
-                    logger.debug(`💾 图标缓存已保存: ${Object.keys(cache).length}个域名`);
-                } catch (e) {
-                    logger.warn('保存图标缓存失败:', e);
+                    localStorage.setItem('coolai_icon_fail_cache', JSON.stringify(failCache));
+                    logger.debug(`💾 图标缓存已保存: ${Object.keys(cache).length}个成功，${Object.keys(failCache).length}个失败`);
+                } catch (error) {
+                    logger.warn('保存图标缓存失败:', error);
                 }
             }
             
@@ -10935,47 +10860,28 @@
             loadIconCache() {
                 try {
                     const cache = JSON.parse(localStorage.getItem('coolai_icon_cache') || '{}');
+                    const failCache = JSON.parse(localStorage.getItem('coolai_icon_fail_cache') || '{}');
                     let loaded = 0;
+                    let failed = 0;
+
                     Object.entries(cache).forEach(([domain, url]) => {
-                        this.iconCache.set(domain, url);
+                        this.iconCache.set(this.normalizeIconDomain(domain), url);
                         loaded++;
                     });
-                    if (loaded > 0) {
-                        logger.info(`📥 已加载图标缓存: ${loaded}个域名`);
-                    }
-                } catch (e) {
-                    logger.warn('加载图标缓存失败:', e);
-                }
-            }
-            
-            // � 保存图标缓存到localStorage（持久化）
-            saveIconCache() {
-                try {
-                    const cache = {};
-                    this.iconCache.forEach((url, domain) => {
-                        cache[domain] = url;
+
+                    if (!this.iconFailCache) this.iconFailCache = new Map();
+                    Object.entries(failCache).forEach(([domain, ts]) => {
+                        this.iconFailCache.set(this.normalizeIconDomain(domain), Number(ts));
+                        failed++;
                     });
-                    localStorage.setItem('coolai_icon_cache', JSON.stringify(cache));
-                    logger.debug(`💾 图标缓存已保存: ${Object.keys(cache).length}个域名`);
-                } catch (e) {
-                    logger.warn('保存图标缓存失败:', e);
-                }
-            }
-            
-            // 📥 从localStorage加载图标缓存
-            loadIconCache() {
-                try {
-                    const cache = JSON.parse(localStorage.getItem('coolai_icon_cache') || '{}');
-                    let loaded = 0;
-                    Object.entries(cache).forEach(([domain, url]) => {
-                        this.iconCache.set(domain, url);
-                        loaded++;
-                    });
-                    if (loaded > 0) {
-                        logger.info(`📥 已加载图标缓存: ${loaded}个域名`);
+
+                    if (loaded > 0 || failed > 0) {
+                        logger.info(`📥 已加载图标缓存: ${loaded}个成功，${failed}个失败`);
                     }
-                } catch (e) {
-                    logger.warn('加载图标缓存失败:', e);
+                } catch (error) {
+                    logger.warn('加载图标缓存失败:', error);
+                    this.iconCache = new Map();
+                    this.iconFailCache = new Map();
                 }
             }
             
@@ -13769,97 +13675,187 @@
                 return '网站链接';
             }
 
-            // 渲染网站图标（支持favicon和本地图标兜底）+ 🚀 图标缓存优化
+            // 渲染网站图标（静态缓存优先 + API兜底 + 文字占位）
             renderWebsiteIcon(website, iconClass) {
-                const defaultIconUrl = 'https://coolai.top/wp-content/uploads/ico.png';
-                const domain = this.extractDomain(website.url);
-                
-                // 优先级1: 如果有有效的favicon URL
-                if (website.faviconUrl && website.iconType === 'favicon') {
-                    // 智能加载策略：静态文件 -> API -> 默认图标
-                    const staticUrl = this.getStaticFaviconUrl(domain);
-                    const apiUrl = this.getFaviconUrl(domain);
-                    
-                    // 🚀 缓存优化：检查是否已有成功加载的URL
-                    if (this.iconCache.has(domain)) {
-                        const cachedUrl = this.iconCache.get(domain);
-                        if (cachedUrl && cachedUrl !== defaultIconUrl) {
-                            // ✅ 已缓存：直接使用缓存URL，不绑定任何事件
-                            return `
-                                <img src="${cachedUrl}" 
-                                     alt="${website.name}"
-                                     data-domain="${domain}"
-                                     data-cached="true"
-                                     loading="lazy"
-                                     style="width: 100%; height: 100%; object-fit: contain;">
-                            `;
-                        }
-                    }
-                    
-                    // ❌ 未缓存：构建fallback链
-                    const finalUrl = staticUrl || apiUrl;
-                    
-                    // 如果有静态URL能力，优先尝试静态文件
-                    if (staticUrl) {
-                        // 构造onerror链：静态失败 -> 调API -> API失败 -> 默认
-                        // 注意：API调用会自动下载并保存文件，下次就能命中静态文件
-                        const onerror = `
-                            if(this.src!=='${apiUrl}'){this.src='${apiUrl}';}
-                            else if(this.src!=='${defaultIconUrl}'){this.src='${defaultIconUrl}';}
-                        `;
-                        const onload = `app.iconCache.set('${domain}', this.src); app.debounceSaveIconCache();`;
-                        
-                        return `
-                            <img src="${finalUrl}" 
-                                 alt="${website.name}"
-                                 data-domain="${domain}"
-                                 loading="lazy"
-                                 style="width: 100%; height: 100%; object-fit: contain;"
-                                 onload="${onload}"
-                                 onerror="${onerror}">
-                        `;
-                    }
+                const domain = this.extractIconDomain(website.url || '');
+                const name = website.name || domain || '网站';
+                const isFaviconMode = website.iconType === 'favicon' || !!website.faviconUrl;
+                let fallbackText = this.getIconFallbackText(name, domain);
 
-                    // 降级：直接使用存储的URL
-                    const onload = `app.iconCache.set('${domain}', this.src); app.debounceSaveIconCache();`;
-                    const onerror = `if(this.src!=='${defaultIconUrl}'){this.src='${defaultIconUrl}';}`;
-                    return `
-                        <img src="${finalUrl}" 
-                             alt="${website.name}"
-                             data-domain="${domain}"
-                             loading="lazy"
-                             style="width: 100%; height: 100%; object-fit: contain;"
-                             onload="${onload}"
-                             onerror="${onerror}">
-                    `;
-                }
-                
-                // 优先级2: 如果有自定义http图标
-                if (website.icon && website.icon.startsWith('http')) {
-                    // ✅ 如果已缓存，直接使用
-                    if (this.iconCache.has(domain)) {
-                        return `<img src="${website.icon}" alt="${website.name}" data-domain="${domain}" data-cached="true" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;">`;
-                    }
-                    
-                    const onload = `app.iconCache.set('${domain}', this.src); app.debounceSaveIconCache();`;
-                    const onerror = `if(this.src!=='${defaultIconUrl}'){this.src='${defaultIconUrl}';}`;
-                    return `<img src="${website.icon}" alt="${website.name}" data-domain="${domain}" loading="lazy" style="width: 100%; height: 100%; object-fit: contain;" onload="${onload}" onerror="${onerror}">`;
-                }
-                
-                // 优先级3: 如果有emoji或文本图标（不是http开头）
                 if (website.icon && !website.icon.startsWith('http')) {
-                    return `<span style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; line-height: 1; padding-top: 1px;">${website.icon}</span>`;
+                    fallbackText = website.icon;
+                } else if (website.iconFallback && !website.iconFallback.startsWith('http')) {
+                    fallbackText = website.iconFallback;
                 }
-                
-                // 优先级4: 使用fallback图标
-                if (website.iconFallback && !website.iconFallback.startsWith('http')) {
-                    return `<span style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; line-height: 1; padding-top: 1px;">${website.iconFallback}</span>`;
+
+                if (!isFaviconMode) {
+                    if (website.icon && website.icon.startsWith('http')) {
+                        return this.renderImageIcon(website.icon, domain, name, [], true, fallbackText);
+                    }
+                    return this.renderTextIcon(fallbackText);
                 }
-                
-                // 优先级5: 默认使用默认图标
-                return `<img src="${defaultIconUrl}" alt="默认图标" data-domain="${domain}" style="width: 100%; height: 100%; object-fit: contain;">`;
+
+                if (!domain) {
+                    return this.renderTextIcon(fallbackText);
+                }
+
+                if (this.iconCache.has(domain)) {
+                    return this.renderImageIcon(this.iconCache.get(domain), domain, name, [], true, fallbackText);
+                }
+
+                if (this.isIconFailCached(domain)) {
+                    return this.renderTextIcon(fallbackText);
+                }
+
+                const candidates = this.getFaviconUrlCandidates(domain);
+                if (candidates.length === 0) {
+                    return this.renderTextIcon(fallbackText);
+                }
+
+                return this.renderImageIcon(candidates[0], domain, name, candidates.slice(1), false, fallbackText);
             }
 
+            extractIconDomain(url) {
+                try {
+                    const normalized = String(url || '').trim();
+                    if (!normalized) return '';
+                    const parsed = new URL(normalized.startsWith('http') ? normalized : `https://${normalized}`);
+                    return this.normalizeIconDomain(parsed.hostname);
+                } catch {
+                    return this.normalizeIconDomain(url);
+                }
+            }
+
+            normalizeIconDomain(domain) {
+                let normalized = String(domain || '')
+                    .trim()
+                    .toLowerCase()
+                    .replace(/^https?:\/\//, '')
+                    .split('/')[0]
+                    .split(':')[0]
+                    .replace(/^\.+|\.+$/g, '');
+
+                const explicitAliases = {
+                    'www.google.com': 'google.com',
+                    'www.github.com': 'github.com',
+                    'www.youtube.com': 'youtube.com'
+                };
+
+                return explicitAliases[normalized] || normalized;
+            }
+
+            getUploadsBaseUrl() {
+                if (window.wpConfig && window.wpConfig.restUrl) {
+                    return window.wpConfig.restUrl.replace('/wp-json/', '/wp-content/uploads/coolai_favicons/');
+                }
+                return 'https://coolai.top/wp-content/uploads/coolai_favicons/';
+            }
+
+            safeFaviconFileName(domain) {
+                return `${domain.replace(/[^a-z0-9.-]/gi, '_')}.png`;
+            }
+
+            legacyFaviconFileName(domain) {
+                const parts = domain.split('.');
+                if (parts.length <= 2) return this.safeFaviconFileName(domain);
+                const legacy = parts.map((part, index) => {
+                    const isMiddle = index > 0 && index < parts.length - 1;
+                    return isMiddle && part.length >= 2 && part.length <= 5 ? `${part}_` : part;
+                }).join('.');
+                return this.safeFaviconFileName(legacy);
+            }
+
+            getFaviconUrlCandidates(domain) {
+                const normalized = this.normalizeIconDomain(domain);
+                if (!normalized) return [];
+
+                const base = this.getUploadsBaseUrl();
+                const domains = [normalized];
+                if (normalized.startsWith('www.')) {
+                    domains.push(normalized.slice(4));
+                }
+
+                const urls = [];
+                domains.forEach(item => {
+                    [
+                        this.safeFaviconFileName(item),
+                        this.legacyFaviconFileName(item),
+                        `${item}.png`
+                    ].forEach(file => {
+                        const url = `${base}${file}`;
+                        if (!urls.includes(url)) urls.push(url);
+                    });
+                });
+
+                const apiUrl = this.getFaviconUrl(normalized);
+                if (apiUrl && !urls.includes(apiUrl)) urls.push(apiUrl);
+                return urls;
+            }
+
+            renderImageIcon(src, domain, alt, fallbackUrls = [], cached = false, fallbackText = '🔗') {
+                const attrs = cached ? ' data-cached="true"' : '';
+                return `<img src="${this.escapeHtml(src)}" alt="${this.escapeHtml(alt)}" data-domain="${this.escapeHtml(domain)}" data-fallback-text="${this.escapeHtml(fallbackText)}" data-fallback-urls="${this.escapeHtml(JSON.stringify(fallbackUrls))}"${attrs} loading="lazy" style="width: 100%; height: 100%; object-fit: contain;" onload="app.handleIconLoad(this)" onerror="app.handleIconError(this)">`;
+            }
+
+            renderTextIcon(text) {
+                return `<span class="icon-fallback-text">${this.escapeHtml(text || '🔗')}</span>`;
+            }
+
+            getIconFallbackText(name, domain) {
+                const source = String(name || domain || '').trim();
+                if (!source) return '🔗';
+                const first = Array.from(source)[0];
+                return first ? first.toUpperCase() : '🔗';
+            }
+
+            handleIconLoad(img) {
+                const domain = this.normalizeIconDomain(img.dataset.domain || '');
+                if (!domain || img.dataset.cached === 'true') return;
+                this.iconCache.set(domain, img.src);
+                if (this.iconFailCache) this.iconFailCache.delete(domain);
+                this.debounceSaveIconCache();
+            }
+
+            handleIconError(img) {
+                let fallbackUrls = [];
+                try {
+                    fallbackUrls = JSON.parse(img.dataset.fallbackUrls || '[]');
+                } catch {
+                    fallbackUrls = [];
+                }
+
+                const nextUrl = fallbackUrls.shift();
+                if (nextUrl) {
+                    img.dataset.fallbackUrls = JSON.stringify(fallbackUrls);
+                    img.src = nextUrl;
+                    return;
+                }
+
+                const domain = this.normalizeIconDomain(img.dataset.domain || '');
+                if (domain && this.iconFailCache) {
+                    this.iconFailCache.set(domain, Date.now());
+                    this.debounceSaveIconCache();
+                }
+
+                const fallbackText = img.dataset.fallbackText || '🔗';
+                const wrapper = document.createElement('span');
+                wrapper.className = 'icon-fallback-text';
+                wrapper.textContent = fallbackText;
+                img.replaceWith(wrapper);
+            }
+
+            isIconFailCached(domain) {
+                if (!this.iconFailCache) return false;
+                const normalized = this.normalizeIconDomain(domain);
+                const ts = this.iconFailCache.get(normalized);
+                if (!ts) return false;
+                const maxAge = 24 * 60 * 60 * 1000;
+                if (Date.now() - ts > maxAge) {
+                    this.iconFailCache.delete(normalized);
+                    return false;
+                }
+                return true;
+            }
             // 获取网站图标（Favicon+本地+通用策略）
             async getWebsiteIcon(url, iconMode = 'favicon') {
                 const domain = this.extractDomain(url);
@@ -14750,26 +14746,18 @@
             
             // 获取Favicon URL（通过WordPress代理 - 本地化存储版）
             getFaviconUrl(domain) {
-                // 核心逻辑：直接指向我们的 API
-                // API 会自动处理：有缓存读缓存，没缓存去下载
+                const normalized = this.normalizeIconDomain(domain);
                 if (window.wpConfig && window.wpConfig.restUrl) {
-                    // 添加时间戳参数 t=Date.now() 仅在强制刷新时需要，平时不需要，利用浏览器缓存
-                    return `${window.wpConfig.restUrl}coolai/v1/favicon?domain=${encodeURIComponent(domain)}`;
+                    return `${window.wpConfig.restUrl}coolai/v1/favicon?domain=${encodeURIComponent(normalized)}`;
                 }
-                // 降级：如果没配置WP API，才使用外部源
-                return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+                return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(normalized)}&sz=128`;
             }
 
             // 获取静态Favicon URL（直接访问文件，绕过PHP）
             getStaticFaviconUrl(domain) {
-                if (window.wpConfig && window.wpConfig.restUrl) {
-                    // 假设 uploads 目录结构：/wp-content/uploads/coolai_favicons/
-                    // 通过替换 restUrl (/wp-json/) 来推导
-                    return window.wpConfig.restUrl.replace('/wp-json/', '/wp-content/uploads/coolai_favicons/') + domain + '.png';
-                }
-                return null;
+                const candidates = this.getFaviconUrlCandidates(domain);
+                return candidates.length > 0 ? candidates[0] : null;
             }
-
             async fetchWebsiteInfo(url) {
                 // 获取网站信息
                 const domain = this.extractDomain(url);
