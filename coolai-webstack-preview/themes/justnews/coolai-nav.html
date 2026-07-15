@@ -1,34 +1,37 @@
-﻿<!DOCTYPE html>
+﻿﻿<!DOCTYPE html>
 <!-- 
     ========================================
-    CoolAI 智能导航系统 - WordPress深度集成版
+    CoolAI WebStack 导航系统 - WordPress 集成版
     ========================================
-    版本：v2.4.1
-    最后更新：2025-12-30
+    版本：v2.4.5
+    最后更新：2026-07-15
     
     核心功能：
-    - WordPress用户系统集成（登录态同步）
-    - REST API云端同步（多设备数据共享）
-    - 智能冲突解决（时间戳比对）
-    - 离线队列机制（断网不丢数据）✨ 新增
-    - Favicon手动刷新（强制更新图标）✨ 新增
-    - 18+搜索引擎切换（快捷键支持）
-    - 分类/文件夹管理（无限层级）
-    - 大图/紧凑视图切换
-    - 深色模式支持
-    - 批量操作（拖拽排序、跨分类移动）
-    - 回到顶部按钮（滚动触发）
-    - Favicon多服务备份（国内优化）
+    - WebStack 风格左右布局（左侧分类导航 + 右侧网址卡片）
+    - WordPress 用户系统集成（登录态同步、个人中心、退出/完全退出）
+    - REST API 云端同步（多设备数据共享、本地数据合并）
+    - 本地收藏搜索 + 搜索引擎跳转搜索
+    - 分类管理（新增、重命名、删除、拖拽排序、锁定分类）
+    - 网址管理（新增、编辑、删除、复制、刷新图标、访问统计）
+    - 批量操作（批量选择、移动、删除网址、删除整个分类）
+    - 大卡片/小卡片视图切换，支持卡片信息悬浮说明
+    - 左侧栏窄模式、自动隐藏模式、浮动分类菜单
+    - 手机端响应式优化（横向分类、紧凑卡片、减少误拖拽）
+    - 深色模式、背景主题、显示开关、回到顶部按钮
+    - JSON 导入/导出，兼容旧格式与新分类数据
+    - Favicon 多服务备份与手动刷新（国内访问优化）
     
     技术架构：
-    - 单页应用（集成HTML/CSS/JS）
-    - Must-Use Plugin（coolai-integration.php v2.4.0）
-    - WordPress Template（page-coolai.php）
-    - 数据存储：localStorage缓存 + WordPress数据库
-    - 安全机制：Nonce验证、速率限制、数据隔离
+    - 前端：单页 HTML/CSS/JavaScript（coolai-nav.html）
+    - 后端：WordPress Must-Use Plugin（coolai-integration.php、coolai-admin.php）
+    - 模板：WordPress Page Template（page-coolai.php）
+    - 数据存储：localStorage 缓存 + WordPress 数据库
+    - 安全机制：Nonce 验证、登录态校验、数据隔离
+    - 维护方式：GitHub 版本管理 + Notion 项目说明
     
     项目地址：https://coolai.top
-    文档：QUICKSTART.md | API.md | TROUBLESHOOTING.md
+    GitHub：https://github.com/csxitao/coolai-webstack-wordpress
+    Notion：CoolAI WebStack WordPress 导航项目
     ========================================
 -->
 <html lang="zh-CN">
@@ -1245,6 +1248,31 @@
             color: #666;
             line-height: 1.4;
             opacity: 0.8;
+        }
+
+        .website-card.folder .website-desc {
+            opacity: 1;
+        }
+
+        .folder-count-inline {
+            opacity: 0.8;
+        }
+
+        .folder-name-inline {
+            float: right;
+            display: block;
+            max-width: calc(100% - 82px);
+            margin-left: 12px;
+            margin-right: 21px;
+            color: #333;
+            font-size: 16px;
+            font-weight: 600;
+            line-height: 1.2;
+            opacity: 1;
+            overflow: hidden;
+            text-align: right;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         /* 紧凑模式 */
@@ -6058,6 +6086,33 @@
             color: #ffffff;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
+
+        .tippy-box[data-theme~='neon-blue'] {
+            max-width: min(320px, calc(100vw - 32px)) !important;
+        }
+
+        .tooltip-card-title {
+            color: #ffffff;
+            font-weight: 700;
+            line-height: 1.35;
+            margin-bottom: 4px;
+            word-break: break-word;
+        }
+
+        .tooltip-card-url {
+            color: #8ec7ff;
+            font-size: 12px;
+            line-height: 1.35;
+            margin-bottom: 4px;
+            overflow-wrap: anywhere;
+        }
+
+        .tooltip-card-desc {
+            color: rgba(255, 255, 255, 0.82);
+            font-size: 12px;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
     </style>
 </head>
 
@@ -8985,14 +9040,9 @@
                         this.showUserMenu(e.currentTarget);
                     };
                     
-                    // 鼠标移出时延迟隐藏（给用户时间移动到菜单上）
+                    // 鼠标移出时延迟隐藏，给用户留出移动到菜单上的缓冲时间
                     loginBtn.onmouseleave = (e) => {
-                        setTimeout(() => {
-                            const menu = document.querySelector('.user-dropdown-menu');
-                            if (menu && !menu.matches(':hover')) {
-                                menu.remove();
-                            }
-                        }, 200);
+                        this.scheduleUserMenuClose();
                     };
                     
                     loginBtn.onclick = (e) => {
@@ -9051,6 +9101,7 @@
                 // 如果菜单已存在，不重复创建
                 const existingMenu = document.querySelector('.user-dropdown-menu');
                 if (existingMenu) {
+                    this.cancelUserMenuClose();
                     return;
                 }
                 
@@ -9158,7 +9209,7 @@
                 // 计算菜单位置：侧栏模式在按钮上方左对齐，普通顶部模式保持右侧对齐
                 const rect = triggerElement.getBoundingClientRect();
                 if (document.body.classList.contains('bookmarks-visible')) {
-                    const gap = 12;
+                    const gap = 8;
                     const margin = 12;
                     const menuWidth = menu.offsetWidth || 200;
                     const menuHeight = menu.offsetHeight || 260;
@@ -9184,9 +9235,12 @@
                     menu.style.right = `${window.innerWidth - rect.right}px`;
                 }
                 
-                // 鼠标移出菜单时隐藏
+                menu.onmouseenter = () => {
+                    this.cancelUserMenuClose();
+                };
+
                 menu.onmouseleave = () => {
-                    menu.remove();
+                    this.scheduleUserMenuClose();
                 };
                 
                 // 点击菜单项后自动关闭（除了同步按钮）
@@ -9195,6 +9249,28 @@
                         setTimeout(() => menu.remove(), 100);
                     });
                 });
+            }
+
+            cancelUserMenuClose() {
+                if (this.userMenuCloseTimer) {
+                    clearTimeout(this.userMenuCloseTimer);
+                    this.userMenuCloseTimer = null;
+                }
+            }
+
+            scheduleUserMenuClose(delay = 450) {
+                this.cancelUserMenuClose();
+                this.userMenuCloseTimer = setTimeout(() => {
+                    const menu = document.querySelector('.user-dropdown-menu');
+                    const loginBtn = document.getElementById('navbarLoginBtn');
+                    if (!menu) return;
+
+                    const isOnMenu = menu.matches(':hover');
+                    const isOnLoginBtn = loginBtn && loginBtn.matches(':hover');
+                    if (!isOnMenu && !isOnLoginBtn) {
+                        menu.remove();
+                    }
+                }, delay);
             }
             
             // 显示移动端用户菜单
@@ -10927,14 +11003,13 @@
                         iconHtml = `<img src="${defaultIconUrl}" alt="默认图标" data-domain="${domain}" style="width: 100%; height: 100%; object-fit: contain;">`;
                     }
                     
-                    // 获取网站描述：优先使用自定义描述，否则显示网站名称
-                    const websiteDesc = item.desc && item.desc.trim() ? item.desc.trim() : item.name;
+                    const websiteTooltip = this.buildWebsiteTooltipContent(item);
                     
                     html += `
                         <div class="website-card-compact folder-item has-tooltip"
                              data-website-id="${item.id}"
                              data-folder-id="${folderId}"
-                             data-tippy-content="${this.escapeHtml(websiteDesc)}"
+                             data-tippy-content="${this.escapeHtml(websiteTooltip)}"
                              draggable="${this.state.sortMode ? 'true' : 'false'}"
                              ondragstart="app.handleFolderItemDragStart(event, '${folderId}', '${item.id}')"
                              oncontextmenu="return app.showFolderItemMenu(event, '${folderId}', '${item.id}')">
@@ -12777,13 +12852,14 @@
                              draggable="${draggableAttr}"
                              onclick="app.setCurrentCategorySilently('${this.escapeJsString(categoryId)}'); app.openFolder('${this.escapeJsString(website.id)}')">
                             ${folderIconHtml}
-                            <div class="${titleClass}">${this.highlightSearchText(website.name, localSearchQuery)}</div>
-                            ${isGrid ? `<div class="website-desc">${(website.items || []).length} 个网站</div>` : ''}
+                            ${isGrid
+                                ? `<div class="website-desc"><span class="folder-count-inline">${(website.items || []).length} 个网站</span><span class="folder-name-inline">${this.highlightSearchText(website.name, localSearchQuery)}</span></div>`
+                                : `<div class="${titleClass}">${this.highlightSearchText(website.name, localSearchQuery)}</div>`}
                         </div>
                     `;
                 }
 
-                const websiteDesc = website.desc && website.desc.trim() ? website.desc.trim() : website.name;
+                const websiteTooltip = this.buildWebsiteTooltipContent(website);
                 const iconHtml = this.renderWebsiteIcon(website, iconClass);
                 const isSelected = selectedWebsites.has(selectionKey);
                 const selectedClass = isSelected ? 'selected' : '';
@@ -12797,7 +12873,7 @@
                        class="${cardClass} ${selectedClass} has-tooltip"
                        data-category-id="${this.escapeHtml(categoryId)}"
                        data-selection-key="${this.escapeHtml(selectionKey)}"
-                       data-tippy-content="${this.escapeHtml(websiteDesc)}"
+                       data-tippy-content="${this.escapeHtml(websiteTooltip)}"
                        ${batchMode ? '' : 'target="_blank"'}
                        data-website-id="${this.escapeHtml(website.id)}"
                        draggable="${draggableAttr}"
@@ -13094,19 +13170,108 @@
                 }
                 img.onerror = null;
             }
+
+            buildWebsiteTooltipContent(website) {
+                const name = (website?.name || website?.title || '未命名网站').trim();
+                const url = (website?.url || '').trim();
+                const desc = (website?.desc || website?.description || '').trim();
+                const urlLine = url ? `<div class="tooltip-card-url">${this.escapeHtml(url)}</div>` : '';
+                const descLine = desc ? `<div class="tooltip-card-desc">${this.escapeHtml(desc)}</div>` : '';
+
+                return `
+                    <div class="tooltip-card-title">${this.escapeHtml(name)}</div>
+                    ${urlLine}
+                    ${descLine || (!url ? '<div class="tooltip-card-desc">暂无更多说明</div>' : '')}
+                `.trim();
+            }
+
+            buildFallbackTooltipContent(el) {
+                const titleEl = el.querySelector('.website-title, .website-title-compact, .folder-name-inline');
+                const name = titleEl ? titleEl.textContent.trim() : '';
+                const url = el.getAttribute('href') || el.querySelector('a[href]')?.getAttribute('href') || '';
+
+                if (!name && !url) return '';
+
+                const titleLine = name ? `<div class="tooltip-card-title">${this.escapeHtml(name)}</div>` : '';
+                const urlLine = url ? `<div class="tooltip-card-url">${this.escapeHtml(url)}</div>` : '';
+                return `${titleLine}${urlLine}`.trim();
+            }
+
+            getTooltipBoundary() {
+                const margin = 16;
+                let boundaryEl = document.getElementById('tooltipBoundary');
+                if (!boundaryEl) {
+                    boundaryEl = document.createElement('div');
+                    boundaryEl.id = 'tooltipBoundary';
+                    boundaryEl.setAttribute('aria-hidden', 'true');
+                    document.body.appendChild(boundaryEl);
+                }
+
+                const applyBoundary = (left, top, right, bottom) => {
+                    boundaryEl.style.cssText = `
+                        position: fixed;
+                        left: ${left}px;
+                        top: ${top}px;
+                        width: ${Math.max(0, right - left)}px;
+                        height: ${Math.max(0, bottom - top)}px;
+                        pointer-events: none;
+                        visibility: hidden;
+                        z-index: -1;
+                    `;
+                    return boundaryEl;
+                };
+
+                if (!document.body.classList.contains('bookmarks-visible') || window.innerWidth <= 900) {
+                    return applyBoundary(margin, margin, window.innerWidth - margin, window.innerHeight - margin);
+                }
+
+                const folderView = document.querySelector('.folder-expanded');
+                if (folderView) {
+                    const folderRect = folderView.getBoundingClientRect();
+                    return applyBoundary(
+                        Math.max(margin, folderRect.left + margin),
+                        Math.max(margin, folderRect.top + margin),
+                        Math.min(window.innerWidth - margin, folderRect.right - margin),
+                        Math.min(window.innerHeight - margin, folderRect.bottom - margin)
+                    );
+                }
+
+                const topbar = document.querySelector('.top-navbar');
+                const topbarRect = topbar ? topbar.getBoundingClientRect() : null;
+                const sidebarVisible = topbarRect && topbarRect.right > margin && topbarRect.width > 40;
+                const left = sidebarVisible ? Math.min(topbarRect.right + margin, window.innerWidth - margin) : margin;
+                const right = window.innerWidth - margin;
+
+                return applyBoundary(left, margin, right, window.innerHeight - margin);
+            }
             
             // 初始化 Tippy.js 美化提示
             initTooltips() {
                 // 确保 Tippy.js 已加载
                 if (typeof tippy === 'undefined') {
                     console.warn('Tippy.js 未加载，使用原生 title 属性');
+                    this.tooltipLoadRetries = (this.tooltipLoadRetries || 0) + 1;
+                    if (this.tooltipLoadRetries <= 8) {
+                        setTimeout(() => this.initTooltips(), 300);
+                    }
                     return;
                 }
+                this.tooltipLoadRetries = 0;
                 
                 // 销毁旧的 tooltip 实例（如果存在）
                 document.querySelectorAll('.has-tooltip').forEach(el => {
                     if (el._tippy) {
                         el._tippy.destroy();
+                    }
+
+                    const currentContent = (el.getAttribute('data-tippy-content') || '').trim();
+                    const fallbackContent = this.buildFallbackTooltipContent(el);
+                    if (!currentContent || !currentContent.includes('tooltip-card-title')) {
+                        if (fallbackContent) {
+                            el.setAttribute('data-tippy-content', fallbackContent);
+                        } else if (currentContent) {
+                            el.setAttribute('data-tippy-content', `<div class="tooltip-card-desc">${this.escapeHtml(currentContent)}</div>`);
+                        }
                     }
                 });
                 
@@ -13118,31 +13283,80 @@
                     arrow: true,
                     duration: [300, 200],
                     delay: [200, 0],
-                    maxWidth: 280,
+                    maxWidth: 320,
                     interactive: false,
                     appendTo: document.body,
-                    allowHTML: false,
-                    zIndex: 150,
+                    allowHTML: true,
+                    zIndex: 10060,
                     hideOnClick: true,
                     trigger: 'mouseenter',
+                    offset: [0, 10],
+                    moveTransition: 'transform 0.15s ease-out',
+                    onCreate: (instance) => {
+                        const boundary = this.getTooltipBoundary();
+                        instance.setProps({
+                            popperOptions: {
+                                modifiers: [
+                                    {
+                                        name: 'preventOverflow',
+                                        options: {
+                                            boundary,
+                                            rootBoundary: 'viewport',
+                                            padding: 0,
+                                            altAxis: true,
+                                            tether: true,
+                                        },
+                                    },
+                                    {
+                                        name: 'flip',
+                                        options: {
+                                            boundary,
+                                            rootBoundary: 'viewport',
+                                            padding: 0,
+                                            fallbackPlacements: ['bottom'],
+                                        },
+                                    },
+                                ],
+                            },
+                        });
+                    },
                     // 当鼠标移到菜单区域时隐藏tooltip，避免干扰
                     onShow(instance) {
                         const reference = instance.reference;
+                        const content = (reference.getAttribute('data-tippy-content') || '').trim();
+                        if (!content) {
+                            return false;
+                        }
+                        const boundary = app.getTooltipBoundary();
+                        instance.setProps({
+                            popperOptions: {
+                                modifiers: [
+                                    {
+                                        name: 'preventOverflow',
+                                        options: {
+                                            boundary,
+                                            rootBoundary: 'viewport',
+                                            padding: 0,
+                                            altAxis: true,
+                                            tether: true,
+                                        },
+                                    },
+                                    {
+                                        name: 'flip',
+                                        options: {
+                                            boundary,
+                                            rootBoundary: 'viewport',
+                                            padding: 0,
+                                            fallbackPlacements: ['bottom'],
+                                        },
+                                    },
+                                ],
+                            },
+                        });
                         const menuContainer = reference.querySelector('.card-menu-container-compact');
                         if (menuContainer && menuContainer.classList.contains('menu-open')) {
                             return false; // 菜单打开时不显示tooltip
                         }
-                    },
-                    // 排除菜单容器区域
-                    popperOptions: {
-                        modifiers: [
-                            {
-                                name: 'preventOverflow',
-                                options: {
-                                    boundary: 'viewport',
-                                },
-                            },
-                        ],
                     },
                 });
                 
